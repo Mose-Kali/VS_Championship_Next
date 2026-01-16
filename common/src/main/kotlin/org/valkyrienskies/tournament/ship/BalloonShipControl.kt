@@ -3,6 +3,7 @@ package org.valkyrienskies.tournament.ship
 import com.fasterxml.jackson.annotation.JsonAutoDetect
 import org.joml.Vector3i
 import org.valkyrienskies.core.api.ships.*
+import org.valkyrienskies.core.api.world.PhysLevel
 import org.valkyrienskies.tournament.util.extension.void
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -17,11 +18,15 @@ import java.util.concurrent.CopyOnWriteArrayList
  * @see TournamentShips
  */
 @Deprecated("Use TournamentShips instead")
-class BalloonShipControl : ShipForcesInducer {
+class BalloonShipControl : ShipPhysicsListener {
 
     val balloons = CopyOnWriteArrayList<Pair<Vector3i, Double>>()
 
-    override fun applyForces(physShip: PhysShip) =
-        void()
+    override fun physTick(
+        physShip: PhysShip,
+        physLevel: PhysLevel
+    ) {
+        TODO("Not yet implemented")
+    }
 
 }

@@ -9,15 +9,18 @@ import net.minecraft.world.level.block.entity.BlockEntityTicker
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
+import org.joml.Quaterniond
 import org.joml.Vector3d
 import org.joml.Vector3dc
 import org.valkyrienskies.core.api.ships.ServerShip
 import org.valkyrienskies.core.api.ships.properties.ShipId
-import org.valkyrienskies.core.apigame.constraints.VSAttachmentConstraint
+import org.valkyrienskies.core.internal.joints.VSFixedJoint
+import org.valkyrienskies.core.internal.joints.VSJointId
+import org.valkyrienskies.core.internal.joints.VSJointMaxForceTorque
+import org.valkyrienskies.core.internal.joints.VSJointPose
 import org.valkyrienskies.mod.common.*
 import org.valkyrienskies.mod.common.util.toJOML
 import org.valkyrienskies.mod.common.util.toMinecraft
-import org.valkyrienskies.physics_api.ConstraintId
 import org.valkyrienskies.tournament.TournamentBlockEntities
 import org.valkyrienskies.tournament.TournamentBlocks
 import org.valkyrienskies.tournament.util.extension.toBlock
@@ -28,8 +31,8 @@ import kotlin.streams.asSequence
 class ConnectorBlockEntity(pos: BlockPos, state: BlockState):
     BlockEntity(TournamentBlockEntities.CONNECTOR.get(), pos, state)
 {
-    var constraint: ConstraintId? = null
-    var constraintData: VSAttachmentConstraint? = null
+    var constraint: VSJointId? = null
+    var constraintData: VSFixedJoint? = null
     var otherbesec: BlockPos? = null
     var redstoneLevel = 0
     var recreate = false
@@ -40,13 +43,15 @@ class ConnectorBlockEntity(pos: BlockPos, state: BlockState):
         if (recreate) {
             if (redstoneLevel == 0) {
                 println("restoring constraint")
-                constraint = level.shipObjectWorld.createNewConstraint(constraintData!!)
-                val other = Vector3d(constraintData!!.localPos1).toBlock()
-                val otherBe = level.getBlockEntity(other) as ConnectorBlockEntity
-                assert(otherBe.constraintData == null)
-                otherBe.constraint = constraint
-                otherBe.setChanged()
-                this.setChanged()
+                ValkyrienSkiesMod.getOrCreateGTPA(dimensionId = level.dimensionId).addJoint(constraintData!!) { id->
+                    constraint = id
+                    val other = Vector3d(constraintData!!.pose1.pos).toBlock()
+                    val otherBe = level.getBlockEntity(other) as ConnectorBlockEntity
+                    assert(otherBe.constraintData == null)
+                    otherBe.constraint = constraint
+                    otherBe.setChanged()
+                    this.setChanged()
+                }
             }
             recreate = false
         }
@@ -107,23 +112,25 @@ class ConnectorBlockEntity(pos: BlockPos, state: BlockState):
         val (idA, posA) = transform(centerA)
         val (idB, posB) = transform(centerB)
 
-        val cfg = VSAttachmentConstraint(
+        val cfg = VSFixedJoint(
             idA,
+            VSJointPose(centerA, Quaterniond()),
             idB,
+            VSJointPose(centerB, Quaterniond()),
+            VSJointMaxForceTorque(maxForce, maxForce),
             compliance,
-            centerA,
-            centerB,
-            maxForce,
-            min(posA.distance(posB), 1.4),
+            //min(posA.distance(posB), 1.4),
         )
         constraintData = cfg
-        constraint = level.shipObjectWorld.createNewConstraint(cfg)
-        otherbesec = null
-        otherBe.constraint = constraint
-        otherBe.constraintData = null
-        otherBe.otherbesec = blockPos
-        otherBe.setChanged()
-        this.setChanged()
+        ValkyrienSkiesMod.getOrCreateGTPA(dimensionId = level.dimensionId).addJoint(cfg) { id->
+            constraint = id
+            otherbesec = null
+            otherBe.constraint = constraint
+            otherBe.constraintData = null
+            otherBe.otherbesec = blockPos
+            otherBe.setChanged()
+            this.setChanged()
+        }
         return constraint != null
     }
 
@@ -137,12 +144,12 @@ class ConnectorBlockEntity(pos: BlockPos, state: BlockState):
                     if (otherBe != this)
                         otherBe?.disconnect(true)
                 }
-                doo(constraintData!!.localPos0)
-                doo(constraintData!!.localPos1)
+                doo(constraintData!!.pose0.pos)
+                doo(constraintData!!.pose1.pos)
             }
         }
         constraint?.let {
-            level.shipObjectWorld.removeConstraint(constraint!!)
+            ValkyrienSkiesMod.getOrCreateGTPA(dimensionId = level.dimensionId).removeJoint(constraint!!)
             constraint = null
             constraintData = null
             this.setChanged()
@@ -170,18 +177,25 @@ class ConnectorBlockEntity(pos: BlockPos, state: BlockState):
         constraint?.let {
             tag.putInt("constraint", it)
             constraintData?.let {
-                tag.putLong("id0", it.shipId0)
-                tag.putLong("id1", it.shipId1)
+                it.shipId0?.let { value -> tag.putLong("id0", value) }
+                it.shipId1?.let { value -> tag.putLong("id1", value) }
 
-                tag.putDouble("lp0x", it.localPos0.x())
-                tag.putDouble("lp0y", it.localPos0.y())
-                tag.putDouble("lp0z", it.localPos0.z())
+                tag.putDouble("lp0x", it.pose0.pos.x())
+                tag.putDouble("lp0y", it.pose0.pos.y())
+                tag.putDouble("lp0z", it.pose0.pos.z())
+                tag.putDouble("rot0x", it.pose0.rot.x())
+                tag.putDouble("rot0y", it.pose0.rot.y())
+                tag.putDouble("rot0z", it.pose0.rot.z())
+                tag.putDouble("rot0w", it.pose0.rot.w())
 
-                tag.putDouble("lp1x", it.localPos1.x())
-                tag.putDouble("lp1y", it.localPos1.y())
-                tag.putDouble("lp1z", it.localPos1.z())
+                tag.putDouble("lp1x", it.pose1.pos.x())
+                tag.putDouble("lp1y", it.pose1.pos.y())
+                tag.putDouble("lp1z", it.pose1.pos.z())
+                tag.putDouble("rot1x", it.pose1.rot.x())
+                tag.putDouble("rot1y", it.pose1.rot.y())
+                tag.putDouble("rot1z", it.pose1.rot.z())
+                tag.putDouble("rot1w", it.pose1.rot.w())
 
-                tag.putDouble("dist", it.fixedDistance)
             }
             otherbesec?.let {
                 tag.putInt("obx", it.x)
@@ -198,22 +212,39 @@ class ConnectorBlockEntity(pos: BlockPos, state: BlockState):
 
             if (tag.contains("id0")) {
                 recreate = constraintData == null
-                constraintData = VSAttachmentConstraint(
+                constraintData = VSFixedJoint(
                     tag.getLong("id0"),
+                    VSJointPose(
+                        Vector3d(
+                            tag.getDouble("lp0x"),
+                            tag.getDouble("lp0y"),
+                            tag.getDouble("lp0z"),
+                        ),
+                        Quaterniond(
+                            tag.getDouble("rot0x"),
+                            tag.getDouble("rot0y"),
+                            tag.getDouble("rot0z"),
+                            tag.getDouble("rot0w"),
+                        ),
+                    ),
+
                     tag.getLong("id1"),
+                    VSJointPose(
+                        Vector3d(
+                            tag.getDouble("lp1x"),
+                            tag.getDouble("lp1y"),
+                            tag.getDouble("lp1z"),
+                        ),
+                        Quaterniond(
+                            tag.getDouble("rot1x"),
+                            tag.getDouble("rot1y"),
+                            tag.getDouble("rot1z"),
+                            tag.getDouble("rot1w"),
+                        ),
+                    ),
+                    VSJointMaxForceTorque(maxForce, maxForce),
                     compliance,
-                    Vector3d(
-                        tag.getDouble("lp0x"),
-                        tag.getDouble("lp0y"),
-                        tag.getDouble("lp0z"),
-                    ),
-                    Vector3d(
-                        tag.getDouble("lp1x"),
-                        tag.getDouble("lp1y"),
-                        tag.getDouble("lp1z"),
-                    ),
-                    maxForce,
-                    tag.getDouble("dist"),
+                    //tag.getDouble("dist"),
                 )
             }
 
@@ -229,7 +260,7 @@ class ConnectorBlockEntity(pos: BlockPos, state: BlockState):
 
     companion object {
         private const val compliance = 1e-20
-        private const val maxForce = 1e10
+        private const val maxForce: Float = 1e10f
 
         val ticker = BlockEntityTicker<ConnectorBlockEntity> { level, _, _, be ->
             if(level !is ServerLevel)

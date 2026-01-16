@@ -6,13 +6,16 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.context.UseOnContext
+import org.joml.Quaterniond
+import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.properties.ShipId
-import org.valkyrienskies.core.apigame.constraints.*
+import org.valkyrienskies.core.internal.joints.*
 import org.valkyrienskies.mod.common.dimensionId
 import org.valkyrienskies.mod.common.getShipObjectManagingPos
 import org.valkyrienskies.mod.common.shipObjectWorld
 import org.valkyrienskies.mod.common.util.toJOMLD
-import org.valkyrienskies.physics_api.ConstraintId
+import org.valkyrienskies.core.internal.joints.VSJointId
+import org.valkyrienskies.mod.common.ValkyrienSkiesMod
 import org.valkyrienskies.tournament.blocks.RopeHookBlock
 import org.valkyrienskies.tournament.TournamentBlocks
 import org.valkyrienskies.tournament.TournamentConfig
@@ -24,7 +27,8 @@ class RopeItem : Item(
 
     private var clickedPosition: BlockPos? = null
     private var clickedShipId: ShipId? = null
-    private var ropeConstraintId: ConstraintId? = null
+    private var ropeConstraintId: VSJointId? = null
+    private var clickedEntity: RopeHookBlockEntity? = null
 
     override fun useOn(context: UseOnContext): InteractionResult {
 
@@ -37,11 +41,7 @@ class RopeItem : Item(
             // if its a hook block
             if (level.getBlockState(blockPos).block == TournamentBlocks.ROPE_HOOK.get()) {
                 //hook it up
-                connectRope(level.getBlockState(blockPos).block as RopeHookBlock, blockPos, shipID, level)
-                if (clickedPosition == null)
-                    context.player!!.sendSystemMessage(Component.translatable("chat.vs_tournament.rope.connected"))
-                else
-                    context.player!!.sendSystemMessage(Component.translatable("chat.vs_tournament.rope.first"))
+                connectRope(context, level.getBlockState(blockPos).block as RopeHookBlock, blockPos, shipID, level)
 
                 println("  ROPE --> " + TournamentBlocks.ROPE_HOOK.get() + " < == > " + level.getBlockState(blockPos).block)
 
@@ -53,7 +53,7 @@ class RopeItem : Item(
         return super.useOn(context)
     }
 
-    private fun connectRope(hookBlock: RopeHookBlock, blockPos: BlockPos, shipId: ShipId?, level: ServerLevel) {
+    private fun connectRope(context: UseOnContext, hookBlock: RopeHookBlock, blockPos: BlockPos, shipId: ShipId?, level: ServerLevel) {
         if(clickedPosition != null) {
 
             // CONNECT FULL ROPE
@@ -98,31 +98,37 @@ class RopeItem : Item(
 
             val ropeCompliance = 1e-5 / (level.getShipObjectManagingPos(blockPos)?.inertiaData?.mass ?: 1).toDouble()
             val ropeMaxForce = TournamentConfig.SERVER.ropeMaxForce
-            val ropeConstraint = VSRopeConstraint(
-                thisShipId, otherShipId,
+            val ropeConstraint = VSDistanceJoint(
+                thisShipId,
+                VSJointPose(posA, Quaterniond()),
+                otherShipId,
+                VSJointPose(posB, Quaterniond()),
+                VSJointMaxForceTorque(ropeMaxForce.toFloat(), ropeMaxForce.toFloat()),
                 ropeCompliance,
-                posA, posB,
-                ropeMaxForce,
-                posC.sub(posD).length() + 1.0
+                0.0f,
+                (posC.sub(posD).length() + 1.0).toFloat()
             )
 
             println("Length: "+ posC.sub(posD).length())
             println(ropeConstraint)
+            println(blockPos.toJOMLD())
+            println(clickedEntity)
+            val targetEntity = level.getBlockEntity(blockPos) as RopeHookBlockEntity
 
-            val ropeConstraintId = level.shipObjectWorld.createNewConstraint(ropeConstraint)
-            this.ropeConstraintId = ropeConstraintId
-            ropeConstraintId?.let {
-                (level.getBlockEntity(blockPos) as RopeHookBlockEntity)
-                    .setRopeID(it, posA, posB, level)
-                (level.getBlockEntity(clickedPosition!!) as RopeHookBlockEntity)
-                    .setSecondary(blockPos)
+            ValkyrienSkiesMod.getOrCreateGTPA(dimensionId = level.dimensionId).addJoint(ropeConstraint) { id ->
+                this.ropeConstraintId = id
+                ropeConstraintId?.let {
+                    targetEntity!!.setRopeID(it, posA, posB, level)
+                    clickedEntity!!.setSecondary(blockPos)
+                }
+
+                clickedPosition = null
+                clickedShipId = null
+                this.ropeConstraintId = null
+
+                println("Done\n")
+                context.player!!.sendSystemMessage(Component.translatable("chat.vs_tournament.rope.connected"))
             }
-
-            clickedPosition = null
-            clickedShipId = null
-            this.ropeConstraintId = null
-
-            println("Done\n")
 
         } else {
 
@@ -130,6 +136,8 @@ class RopeItem : Item(
             clickedShipId = shipId
             clickedPosition = blockPos
             ropeConstraintId = null
+            clickedEntity = level.getBlockEntity(clickedPosition!!) as RopeHookBlockEntity
+            context.player!!.sendSystemMessage(Component.translatable("chat.vs_tournament.rope.first"))
 
         }
     }

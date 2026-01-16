@@ -6,12 +6,13 @@ license = "Apache-2.0"
 [[mods]]
 modId = "vs_tournament"
 version = "${version}"
-displayName = "VS Tournament Mod"
+displayName = "VS: Championship Next"
 authors = [
     "alex_s168",
     "ConstantDust",
     "Illuc",
-    "Percant Pie"
+    "Percant Pie",
+    "MoseKali"
 ]
 description = '''
 

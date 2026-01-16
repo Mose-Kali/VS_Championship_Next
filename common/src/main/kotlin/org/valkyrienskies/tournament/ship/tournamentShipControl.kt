@@ -4,10 +4,12 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect
 import com.fasterxml.jackson.annotation.JsonIgnore
 import org.joml.Vector3d
 import org.joml.Vector3i
+import org.valkyrienskies.core.api.ships.LoadedServerShip
 import org.valkyrienskies.core.api.ships.PhysShip
 import org.valkyrienskies.core.api.ships.ServerShip
-import org.valkyrienskies.core.api.ships.ShipForcesInducer
+import org.valkyrienskies.core.api.ships.ShipPhysicsListener
 import org.valkyrienskies.core.api.ships.saveAttachment
+import org.valkyrienskies.core.api.world.PhysLevel
 import org.valkyrienskies.core.impl.game.ships.PhysShipImpl
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -22,7 +24,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * @see TournamentShips
   */
 @Deprecated("Use TournamentShips instead")
-class tournamentShipControl : ShipForcesInducer {
+class tournamentShipControl : ShipPhysicsListener {
 
     @JsonIgnore
     var ship: ServerShip? = null
@@ -38,7 +40,10 @@ class tournamentShipControl : ShipForcesInducer {
     private val Thrusters = mutableListOf<Triple<Vector3i, Vector3d, Double>>()
     private val Pulses = CopyOnWriteArrayList<Pair<Vector3d, Vector3d>>()
 
-    override fun applyForces(physShip: PhysShip) {
+    override fun physTick(
+        physShip: PhysShip,
+        physLevel: PhysLevel
+    ) {
         if (ship == null) return
         physShip as PhysShipImpl
 
@@ -57,8 +62,7 @@ class tournamentShipControl : ShipForcesInducer {
 
         tournamentShips.addPulses(Pulses)
         Pulses.clear()
-
-        ship!!.saveAttachment<tournamentShipControl>(null)
+        (ship as? LoadedServerShip)?.let { it!!.removeAttachment(tournamentShips::class.java) }
     }
 
 }

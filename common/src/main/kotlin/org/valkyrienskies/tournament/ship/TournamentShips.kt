@@ -8,8 +8,13 @@ import net.minecraft.world.phys.AABB
 import org.joml.Vector3d
 import org.joml.Vector3i
 import org.joml.primitives.AABBd
-import org.valkyrienskies.core.api.ships.*
-import org.valkyrienskies.core.apigame.world.properties.DimensionId
+import org.valkyrienskies.core.api.attachment.*
+import org.valkyrienskies.core.api.ships.LoadedServerShip
+import org.valkyrienskies.core.api.ships.PhysShip
+import org.valkyrienskies.core.api.ships.ServerShip
+import org.valkyrienskies.core.api.ships.ShipPhysicsListener
+import org.valkyrienskies.core.api.world.PhysLevel
+import org.valkyrienskies.core.api.world.properties.DimensionId
 import org.valkyrienskies.core.impl.game.ships.PhysShipImpl
 import org.valkyrienskies.mod.common.util.toBlockPos
 import org.valkyrienskies.mod.common.util.toJOML
@@ -28,7 +33,7 @@ import java.util.concurrent.CopyOnWriteArrayList
     isGetterVisibility = JsonAutoDetect.Visibility.NONE,
     setterVisibility = JsonAutoDetect.Visibility.NONE
 )
-class TournamentShips: ShipForcesInducer {
+class TournamentShips: ShipPhysicsListener {
 
     var level: DimensionId = "minecraft:overworld"
 
@@ -64,7 +69,7 @@ class TournamentShips: ShipForcesInducer {
     @JsonIgnore
     private var ticker: TickScheduler.Ticking? = null
 
-    override fun applyForces(physShip: PhysShip) {
+    fun applyForces(physShip: PhysShip) {
         physShip as PhysShipImpl
 
         if (ticker == null) {
@@ -101,7 +106,7 @@ class TournamentShips: ShipForcesInducer {
             }
         }
 
-        val vel = physShip.poseVel.vel
+        val vel = physShip.velocity
 
         thrusters.forEach { data ->
             val (pos, force, tier, submerged) = data
@@ -115,7 +120,7 @@ class TournamentShips: ShipForcesInducer {
 
             if (force.isFinite && (
                 TournamentConfig.SERVER.thrusterShutoffSpeed == -1.0
-                    || physShip.poseVel.vel.length() < TournamentConfig.SERVER.thrusterShutoffSpeed
+                    || physShip.velocity.length() < TournamentConfig.SERVER.thrusterShutoffSpeed
                 )
             ) {
                 physShip.applyInvariantForceToPos(tForce.mul(TournamentConfig.SERVER.thrusterSpeed * tier), tPos)
@@ -239,13 +244,26 @@ class TournamentShips: ShipForcesInducer {
         propellers.removeIf { it.pos == pos }
     }
 
+    override fun physTick(
+        physShip: PhysShip,
+        physLevel: PhysLevel
+    ) {
+        applyForces(physShip)
+    }
+
     companion object {
         fun getOrCreate(ship: ServerShip, level: DimensionId) =
-            ship.getAttachment<TournamentShips>()
-                ?: TournamentShips().also {
+            if (ship is LoadedServerShip) {
+                ship.getAttachment(TournamentShips::class.java)
+                    ?: TournamentShips().also {
+                        it.level = level
+                        ship.setAttachment(it)
+                    }
+            } else {
+                TournamentShips().also {
                     it.level = level
-                    ship.saveAttachment(it)
                 }
+            }
 
         fun getOrCreate(ship: ServerShip): TournamentShips =
             getOrCreate(ship, ship.chunkClaimDimension)

@@ -5,13 +5,15 @@ import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.MultiBufferSource
 import net.minecraft.client.renderer.RenderType
 import net.minecraft.client.resources.model.BakedModel
+import net.minecraft.client.resources.model.ModelResourceLocation
 import net.minecraft.resources.ResourceLocation
 import net.minecraft.world.level.block.entity.BlockEntity
 import org.valkyrienskies.tournament.services.TournamentPlatformHelper
+import java.util.Locale
 
 object TournamentModels {
 
-    private fun getModel(rl: ResourceLocation): BakedModel {
+    private fun getModel(rl: ModelResourceLocation): BakedModel {
         val model = TournamentPlatformHelper
             .get()
             .loadBakedModel(rl)
@@ -37,7 +39,7 @@ object TournamentModels {
     }
 
     data class Model(
-        val resourceLocation: ResourceLocation
+        val resourceLocation: ModelResourceLocation,
     ) {
         val bakedModel: BakedModel by lazy {
             getModel(resourceLocation)
@@ -70,14 +72,14 @@ object TournamentModels {
     }
 
     private fun model(name: String): Model {
-        val rl = ResourceLocation(TournamentMod.MOD_ID, name)
+        val rl = ModelResourceLocation(TournamentMod.MOD_ID, name, "")
 
         MODELS += rl
 
         return Model(rl)
     }
 
-    val PROP_BIG = model("block/prop_big_prop")
-    val PROP_SMALL = model("block/prop_small_prop")
+    val PROP_BIG = model("prop_big_prop")
+    val PROP_SMALL = model("prop_small_prop")
 
 }
